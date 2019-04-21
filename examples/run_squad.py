@@ -41,6 +41,8 @@ from pytorch_pretrained_bert.tokenization import (BasicTokenizer,
                                                   BertTokenizer,
                                                   whitespace_tokenize)
 
+from tensorboardX import SummaryWriter
+
 if sys.version_info[0] == 2:
     import cPickle as pickle
 else:
@@ -993,6 +995,8 @@ def main():
             train_sampler = DistributedSampler(train_data)
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
 
+        writer = SummaryWriter(os.path.join('logs', 'BERT0'))
+        iter = 0
         model.train()
         for _ in trange(int(args.num_train_epochs), desc="Epoch"):
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])):
@@ -1004,7 +1008,8 @@ def main():
                     loss = loss.mean() # mean() to average on multi-gpu.
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
-
+                if iter % 100 == 0:
+                    writer.add_scalar('Loss', loss, iter)
                 if args.fp16:
                     optimizer.backward(loss)
                 else:
@@ -1019,6 +1024,7 @@ def main():
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
+                iter += 1
 
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         # Save a trained model, configuration and tokenizer
